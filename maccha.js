@@ -17,8 +17,8 @@ const MACCHA_ROOT = __dirname;
 
 // コマンドラインオプションを解析
 const argv = require('minimist')(process.argv.slice(2), {
-  boolean: ['screenshot'],
-  default: { screenshot: false },
+  boolean: ['windowcapture'],
+  default: { windowcapture: false },
 }, {
   boolean: ['keystroke'],
   default: { keystroke: false },
@@ -209,12 +209,12 @@ generate_mp3.llm = {
   }
 };
 
-async function screenshot(input) {
-  return runRawCommand({cmd: `screencapture ${input.path}`, stdin: ''});
+async function windowcapture(input) {
+  return runRawCommand({cmd: `screencapture -R$(osascript -e 'tell application "System Events"' -e 'set frontProc to first process whose frontmost is true' -e 'set p to position of front window of frontProc' -e 'set s to size of front window of frontProc' -e 'return p & s' -e 'end tell' | sed 's/, /,/g') ${input.path}`, stdin: ''});
 }
 
-screenshot.llm = {
-  description: "Takes a screenshot and saves it to the given path",
+windowcapture.llm = {
+  description: "Takes a screenshot of the front window and saves it to the given path",
   parameters: {
     type: "object",
     properties: {
@@ -253,7 +253,7 @@ const functions = Object.fromEntries(
     runCommand,
     generate_mp3,
     save_file,
-    ...(argv.screenshot ? [screenshot] : []),
+    ...(argv.windowcapture ? [windowcapture] : []),
     ...(argv.keystroke ? [keystroke] : []),
   ].map(def => [def.name, def]));
 
