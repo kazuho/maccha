@@ -22,6 +22,15 @@ Setup
 4. Open [http://127.0.0.1:11434](http://127.0.0.1:11434).
 5. Try asking things like "What time is it in Tokyo?", "ls -l".
 
+Useful Command(s)
+---
+
+`bin/maccha-filter` is a filter program that applies AI to the input and emits the output.
+
+As an example, you can obtain a summary of a file by runing `maccha-filter --model gpt-4.1 'give me the summary' < input-file > output-file`.
+
+You can ask via the chat to run `maccha-filter`; this is an easy way of orchestrating AIs to perform complex tasks!
+
 Switching between the Models
 ---
 
