@@ -6,7 +6,7 @@ ChatGPT is a powerful tool but since it is a Web-based tool, it lacks the capabi
 Maccha is an HTTP proxy intended to be run on macOS locally, providing:
 
 * read access to all local files
-* write access to files under the current directory
+* write access to files under `~/maccha`
 * any execution of local commands, with the above access privileges
 
 It uses sandbox_exec (1) for sandboxes.
@@ -17,9 +17,9 @@ Setup
 ---
 
 1. Git clone this repository, e.g., to `~/projects`.
-2. Go to a directory that you would like to provide write access.
+2. Run `mkdir ~/maccha.sandbox`.
 3. Run maccha.js, with OPENAI_APY_KEY set (e.g., `OPENAI_API_KEY=... node ~/projects/macca.js`).
-4. Go to [http://127.0.0.1:11434](http://127.0.0.1:11434)
+4. Open [http://127.0.0.1:11434](http://127.0.0.1:11434).
 5. Try asking things like "What time is it in Tokyo?", "ls -l".
 
 Switching between the Models
