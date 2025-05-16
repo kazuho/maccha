@@ -9,11 +9,13 @@ Maccha is an HTTP proxy intended to be run on macOS locally, providing:
 * write access to files under `~/maccha`
 * any execution of local commands, with the above access privileges
 
-![screenshot](https://raw.githubusercontent.com/kazuho/maccha/230463d97947fa8b051bd02f7ad2bbded1aa8ff4/doc/assets/screenshot.png)
-
 Internally, maccha uses sandbox_exec (1) for sandboxes.
 
 The web interface is a dead copy of llama.cpp and its license is subject to that of llama.cpp.
+
+See screenshot: [screenshot](https://raw.githubusercontent.com/kazuho/maccha/230463d97947fa8b051bd02f7ad2bbded1aa8ff4/doc/assets/screenshot.png).
+
+
 
 Setup
 ---
