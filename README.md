@@ -17,7 +17,7 @@ Setup
 ---
 
 1. Git clone this repository, e.g., to `~/projects`.
-2. Run `mkdir ~/maccha.sandbox`.
+2. Run `mkdir ~/maccha`.
 3. Run maccha.js, with OPENAI_APY_KEY set (e.g., `OPENAI_API_KEY=... node ~/projects/macca.js`).
 4. Open [http://127.0.0.1:11434](http://127.0.0.1:11434).
 5. Try asking things like "What time is it in Tokyo?", "ls -l".
