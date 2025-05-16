@@ -19,6 +19,9 @@ const MACCHA_ROOT = __dirname;
 const argv = require('minimist')(process.argv.slice(2), {
   boolean: ['screenshot'],
   default: { screenshot: false },
+}, {
+  boolean: ['keystroke'],
+  default: { keystroke: false },
 });
 
 // switch to the sandbox directory or ask the user to create it
@@ -221,6 +224,27 @@ screenshot.llm = {
   }
 };
 
+async function keystroke(input) {
+  return runRawCommand({cmd: `osascript -e 'tell application id "${input.app}" to activate
+tell application "System Events"
+  delay 1
+  keystroke (ASCII character ${input.key - 0})
+end tell
+'`, stdin: ''})
+}
+
+keystroke.llm = {
+  description: "Simulates keystroke on the given application. Use this tool to interact with the application.",
+  parameters: {
+    type: "object",
+    properties: {
+      app: { type: "string", description: "name of the application"},
+      key: { type: "integer", description: "key code to press"},
+    },
+    required: ["app", "key"]
+  },
+};
+
 const functions = Object.fromEntries(
   [
     get_current_time,
@@ -230,6 +254,7 @@ const functions = Object.fromEntries(
     generate_mp3,
     save_file,
     ...(argv.screenshot ? [screenshot] : []),
+    ...(argv.keystroke ? [keystroke] : []),
   ].map(def => [def.name, def]));
 
 const app = express();
