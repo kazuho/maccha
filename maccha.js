@@ -15,6 +15,12 @@ const HOME_DIRECTORY = require('os').homedir();
 const PORT = 11434;
 const MACCHA_ROOT = __dirname;
 
+// コマンドラインオプションを解析
+const argv = require('minimist')(process.argv.slice(2), {
+  boolean: ['screenshot'],
+  default: { screenshot: false },
+});
+
 // switch to the sandbox directory or ask the user to create it
 try {
   process.chdir(path.join(HOME_DIRECTORY, 'maccha'));
@@ -161,6 +167,23 @@ fetchURL.llm = {
   }
 };
 
+function save_file(input) {
+  /* saves input.content to input.path */
+  return runCommand({cmd: `cat > ${input.path}`, stdin: input.content});
+}
+
+save_file.llm = {
+  description: "Saves input.content to input.path",
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: "path to save the file"},
+      content: { type: "string", description: "content to be saved"},
+    },
+    required: ["path", "content"]
+  }
+};
+
 async function generate_mp3(input) {
   /* This commands assumes that the MSTTS docker container is available at a different host specified via environment variable
    * MSTTS_HOST. */
@@ -183,26 +206,31 @@ generate_mp3.llm = {
   }
 };
 
-function save_file(input) {
-  /* saves input.content to input.path */
-  return runCommand({cmd: `cat > ${input.path}`, stdin: input.content});
+async function screenshot(input) {
+  return runRawCommand({cmd: `screencapture ${input.path}`, stdin: ''});
 }
 
-save_file.llm = {
-  description: "Saves input.content to input.path",
+screenshot.llm = {
+  description: "Takes a screenshot and saves it to the given path",
   parameters: {
     type: "object",
     properties: {
-      path: { type: "string", description: "path to save the file"},
-      content: { type: "string", description: "content to be saved"},
+      path: { type: "string", description: "path to save the screenshot"},
     },
-    required: ["path", "content"]
+    required: ["path"]
   }
 };
 
 const functions = Object.fromEntries(
-  [get_current_time, runPython3, fetchURL, runCommand, generate_mp3, save_file].map(def => [def.name, def])
-);
+  [
+    get_current_time,
+    runPython3,
+    fetchURL,
+    runCommand,
+    generate_mp3,
+    save_file,
+    ...(argv.screenshot ? [screenshot] : []),
+  ].map(def => [def.name, def]));
 
 const app = express();
 app.use(bodyParser.json({ limit: '50mb' }));
