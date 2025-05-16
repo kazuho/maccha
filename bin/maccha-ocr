@@ -1,0 +1,33 @@
+#!/usr/bin/env ruby
+
+# Show help if no arguments or --help is given
+if ARGV.empty? || ARGV[0] == '--help'
+  puts <<~USAGE
+    Usage: #{File.basename($0)} [--help] /path/to/image.png
+
+    Description:
+      Reads the specified image file,
+      invokes the macOS Shortcuts "ExtractText2" to perform OCR,
+      and prints the extracted text to stdout.
+
+    Options:
+      --help    Show this help message and exit
+    
+    You have to define the "ExtractText" handler in the Shortcuts app,
+    see docs/shortcut-app-extracttext.png.
+  USAGE
+  exit 0
+end
+
+# passing relative paths to osascript generates a warning
+img_path = File.expand_path(ARGV[0])
+
+# Replace this Ruby process with osascript, passing the script as one -e
+exec "osascript", "-e", <<~APPLESCRIPT
+  set imgPath to "#{img_path}"
+  set imgFile to POSIX file imgPath as alias
+  tell application "Shortcuts Events"
+    run shortcut "ExtractText" with input imgFile
+  end tell
+  return result
+APPLESCRIPT
