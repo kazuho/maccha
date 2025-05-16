@@ -1,0 +1,136 @@
+#!/usr/bin/env ruby
+
+gem 'json'
+require 'optparse'
+require 'net/http'
+require 'uri'
+require 'json'
+
+# デフォルト設定
+options = {
+  server_endpoint: 'http://r7:11434/v1/chat/completions',
+  model:           'r7',             # デフォルトモデルはローカルサーバ(r7)
+  temperature:     0.0,
+  top_p:           1.0,
+  seed:            nil,
+  no_think:        false,
+}
+
+# コマンドラインオプション解析
+opt_parser = OptionParser.new do |opts|
+  opts.banner = 'Usage: filter.rb [options] "<instruction>" < input.txt'
+
+  opts.on('-i', '--instruction-file FILE', 'Read instruction from FILE') do |v|
+    options[:instruction_file] = v
+  end
+
+  opts.on('-m', '--model NAME', 'Model name (default: r7; gpt-*→OpenAI)') do |v|
+    options[:model] = v
+  end
+
+  opts.on('-t', '--temperature FLOAT', Float, 'Sampling temperature') do |v|
+    options[:temperature] = v
+  end
+
+  opts.on('--top_p FLOAT', Float, 'Top-p sampling') do |v|
+    options[:top_p] = v
+  end
+
+  opts.on('--seed INT', Integer, 'Random seed') do |v|
+    options[:seed] = v
+  end
+
+  opts.on('--no-think', 'Append /no_think to system prompt') do
+    options[:no_think] = true
+  end
+
+  opts.on('-h', '--help', 'Show this help') do
+    puts opts
+    exit
+  end
+end
+opt_parser.parse!(ARGV)
+
+# 指示を取得
+instruction = if options[:instruction_file]
+  begin
+    File.read(options[:instruction_file]).chomp
+  rescue Errno::ENOENT => e
+    warn "Instruction file error: #{e.message}"
+    exit 1
+  end
+else
+  ARGV.join(' ')
+end
+
+# 標準入力を全て読み込み
+input_data = STDIN.read
+
+# モデルに応じてエンドポイント & 認証設定
+if options[:model].start_with?('gpt')
+  # OpenAI API
+  endpoint_url = 'https://api.openai.com/v1/chat/completions'
+  api_key = ENV['OPENAI_API_KEY'] || abort('Please set OPENAI_API_KEY environment variable')
+  headers = {
+    'Content-Type'  => 'application/json',
+    'Authorization' => "Bearer #{api_key}"
+  }
+else
+  # ローカル r7 サーバ
+  endpoint_url = options[:server_endpoint]
+  headers = { 'Content-Type' => 'application/json' }
+end
+
+uri = URI.parse(endpoint_url)
+http = Net::HTTP.new(uri.host, uri.port)
+http.use_ssl = (uri.scheme == 'https')
+http.open_timeout = 10    # 接続確立タイムアウト
+http.read_timeout = 900   # レスポンス読み取りタイムアウト（15分）
+
+# リクエスト構築
+request = Net::HTTP::Post.new(uri.request_uri, headers)
+body = {
+  model:       options[:model],
+  temperature: options[:temperature],
+  top_p:       options[:top_p],
+  messages: [
+    {
+      role: 'user',
+      content: <<~SYS.chomp
+        あなた(assistant)は標準入力に渡されたデータを以下に指定された方法で変換し、結果を標準出力に出力するフィルタプログラムです。
+        渡されたデータを愚直に変換し、余計なコメントや推測は不要です。
+
+        変換方法: #{instruction}
+
+        標準入力の内容は以下のとおりです:
+        #{input_data}#{options[:no_think] ? "\n/no_think" : ""}
+      SYS
+    }
+  ]
+}
+body[:seed] = options[:seed] if options[:seed]
+request.body = JSON.generate(body)
+
+# リクエスト送信
+begin
+  response = http.request(request)
+rescue Net::OpenTimeout, Net::ReadTimeout => e
+  warn "Timeout Error: #{e.class} - #{e.message}"; exit 1
+rescue StandardError => e
+  warn "HTTP Request Error: #{e.class} - #{e.message}"; exit 1
+end
+
+# レスポンスチェック & 解析
+unless response.is_a?(Net::HTTPSuccess)
+  warn "Error: HTTP #{response.code} #{response.message}"; exit 1
+end
+
+data = JSON.parse(response.body) rescue (warn "Response JSON Parse Error"; exit 1)
+
+# フィルタ出力処理
+reply = data.dig('choices', 0, 'message', 'content') || ''
+reply.sub!(/\A<think>[\s\S]*?<\/think>\n{,2}/, '')
+reply << "\n" unless reply.end_with?("\n")
+
+STDOUT.write(reply)
+STDOUT.flush
