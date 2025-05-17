@@ -54,28 +54,6 @@ get_current_time.llm = {
   parameters: { type: 'object', properties: {}, required: [] },
 };
 
-async function runRawCommand(input) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('sh', ['-c', input.cmd]);
-    let output = '';
-    proc.stdout.on('data', (chunk) => {
-      output += chunk.toString();
-    });
-    proc.stderr.on('data', (chunk) => {
-      output += chunk.toString();
-    });
-    proc.on('error', (err) => {
-      reject(err);
-    });
-    proc.on('close', (code) => {
-      resolve(output);
-    });
-    if (input.stdin != null)
-      proc.stdin.write(input.stdin);
-    proc.stdin.end();
-  });
-}
-
 async function runCommand(input) {
   return new Promise((resolve, reject) => {
     const proc = spawn('sandbox-exec',
