@@ -195,16 +195,6 @@ save_file.llm = {
   }
 };
 
-async function generate_mp3(input) {
-  /* This commands assumes that the MSTTS docker container is available at a different host specified via environment variable
-   * MSTTS_HOST. */
-  const host = process.env.MSTTS_HOST;
-  if (host == null) {
-    return "MSTTS_HOST not set";
-  }
-  return runRawCommand({cmd: `scp ${input.ssml} ${host}:spx-data/input.ssml && ssh ${host} docker run -i -v /home/$USER/spx-data:/data --rm msftspeech/spx synthesize --file input.ssml --audio output output.mp3 && scp ${host}:spx-data/output.mp3 ${input.mp3}`, stdin: ''});
-}
-
 generate_mp3.llm = {
   description: "Generates a MP3 file given a SSML file.",
   parameters: {
@@ -418,7 +408,8 @@ app.post('/safe-commands', (req, res) => {
   }
   const { exec, argv, stdin } = req.body;
   if ((exec === 'maccha-ocr' && argv.length === 1) ||
-      (exec === 'maccha-windowcapture' && argv.length === 1 && argv[0] === '--base64')) {
+      (exec === 'maccha-windowcapture' && argv.length === 1 && argv[0] === '--base64') ||
+      (exec === 'maccha-mp3' && argv.length === 1 && argv[0] === '--base64')) {
     const proc = spawn(exec, argv);
     let output = '';
     proc.stdout.on('data', chunk => { output += chunk.toString(); });

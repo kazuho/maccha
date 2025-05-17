@@ -1,0 +1,83 @@
+#!/usr/bin/env ruby
+
+require 'net/http'
+require 'json'
+require 'base64'
+
+MACCHA_HOSTPORT = ENV.fetch('MACCHA_HOSTPORT', nil)
+AZURE_TTS_DOCKER_HOST = ENV.fetch('AZURE_TTS_DOCKER_HOST', nil)
+BASE64_MARKER = '!!!!!!base64-start!!!!!!'
+
+# Show help if no arguments or --help is given
+if ARGV.empty? || ARGV[0] == '--help'
+  puts <<~USAGE
+    Usage: #{File.basename($0)} [--help] /path/to/output.mp3 < input.ssml
+
+    Description:
+      Reads SSML from stdin and converts it to MP3 using the Azure Speech API.
+
+    Options:
+      --help    Show this help message and exit
+  USAGE
+  exit 0
+end
+
+ssml = STDIN.read
+mp3_file = ARGV[0]
+
+# if running inside the maccha sandbox, invoke the Web API
+if MACCHA_HOSTPORT
+  uri = URI("http://#{MACCHA_HOSTPORT}/safe-commands");
+  post = Net::HTTP::Post.new(uri)
+  post['content-type'] = 'application/json'
+  post.body = { exec: 'maccha-mp3', argv: ['--base64'], stdin: ssml }.to_json
+  resp = Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(post) }
+  if resp.code != '200'
+    warn "maccha-mp3 failed: #{resp.body}"
+    exit 1
+  end
+  # find where the base64 starts
+  marker_start = resp.body.index("!!!!!!base64-start!!!!!!")
+  unless marker_start
+    abort "maccha-mp3 failed: #{resp.body}"
+  end
+  # decode the base64-encoded mp3 and save it to a file
+  File.open(mp3_file, 'wb') do |f|
+    f.write(Base64.decode64(resp.body[marker_start + BASE64_MARKER.length ..]))
+  end
+  puts resp.body[0 .. marker_start - 1]
+  exit 0
+end
+
+if !AZURE_TTS_DOCKER_HOST
+  warn "AZURE_TTS_DOCKER_HOST is not set"
+  exit 1
+end
+
+# write SSML to file on the remote host
+IO.popen(['ssh', AZURE_TTS_DOCKER_HOST, 'cat > spx-data/maccha-mp3.ssml'], "w") do |pipe|
+  pipe.puts ssml
+end
+unless $?.success? then
+  abort "failed to write SSML to remote host:#{AZURE_TTS_DOCKER_HOST}:#{$?.exitstatus}"
+end
+
+# run the conversion
+unless system("ssh", AZURE_TTS_DOCKER_HOST, "docker run -i -v $HOME/spx-data:/data --rm msftspeech/spx synthesize --file maccha-mp3.ssml", "--audio", "output", "maccha-mp3.mp3") then
+  abort "failed to run conversion on remote host:#{AZURE_TTS_DOCKER_HOST}:#{$?.exitstatus}"
+end
+
+# retrieve the result
+mp3_data = IO.popen(['ssh', AZURE_TTS_DOCKER_HOST, 'cat spx-data/maccha-mp3.mp3'], "r", &:read)
+unless $?.success? then
+  abort "failed to retrieve result from remote host:#{AZURE_TTS_DOCKER_HOST}:#{$?.exitstatus}"
+end
+
+# write the result to the output file or in base64 to stdout
+if mp3_file == '--base64' then
+  puts BASE64_MARKER + Base64.encode64(mp3_data)
+else
+  File.open(mp3_file, 'wb') do |f|
+    f.write(mp3_data)
+  end
+end
