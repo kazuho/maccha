@@ -17,8 +17,8 @@ const MACCHA_ROOT = __dirname;
 
 // analyze command-line arguments, or bail out if they are invalid
 const argv = require('minimist')(process.argv.slice(2), {
-  boolean: ['windowcapture', 'keystroke'],
-  default: { windowcapture: false, keystroke: false },
+  boolean: ['keystroke'],
+  default: {keystroke: false },
   unknown: function (arg) {
     console.log(`Unknown argument: ${arg}`);
     process.exit(1);
@@ -217,21 +217,6 @@ generate_mp3.llm = {
   }
 };
 
-async function windowcapture(input) {
-  return runRawCommand({cmd: `screencapture -R$(osascript -e 'tell application "System Events"' -e 'set frontProc to first process whose frontmost is true' -e 'set p to position of front window of frontProc' -e 'set s to size of front window of frontProc' -e 'return p & s' -e 'end tell' | sed 's/, /,/g') ${input.path}`, stdin: ''});
-}
-
-windowcapture.llm = {
-  description: "Takes a screenshot of the front window and saves it to the given path",
-  parameters: {
-    type: "object",
-    properties: {
-      path: { type: "string", description: "path to save the screenshot"},
-    },
-    required: ["path"]
-  }
-};
-
 async function keystroke(input) {
   return runRawCommand({cmd: `osascript -e 'tell application id "${input.app}" to activate
 tell application "System Events"
@@ -261,7 +246,6 @@ const functions = Object.fromEntries(
     runCommand,
     generate_mp3,
     save_file,
-    ...(argv.windowcapture ? [windowcapture] : []),
     ...(argv.keystroke ? [keystroke] : []),
   ].map(def => [def.name, def]));
 
@@ -433,7 +417,8 @@ app.post('/safe-commands', (req, res) => {
     throw new Error('safe commands cannot be run when MACCHA_HOSTPORT is set');
   }
   const { exec, argv, stdin } = req.body;
-  if (exec === 'maccha-ocr' && argv.length == 1) {
+  if ((exec === 'maccha-ocr' && argv.length === 1) ||
+      (exec === 'maccha-windowcapture' && argv.length === 1 && argv[0] === '--base64')) {
     const proc = spawn(exec, argv);
     let output = '';
     proc.stdout.on('data', chunk => { output += chunk.toString(); });

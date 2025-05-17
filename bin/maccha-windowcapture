@@ -1,0 +1,72 @@
+#!/usr/bin/env ruby
+
+require 'net/http'
+require 'json'
+require 'tempfile'
+require 'base64'
+
+MACCHA_HOSTPORT = ENV.fetch('MACCHA_HOSTPORT', nil)
+
+# Show help if no arguments or --help is given
+if ARGV.empty? || ARGV[0] == '--help'
+  puts <<~USAGE
+    Usage: #{File.basename($0)} [--help] output.png
+
+    Description:
+      Captures the current window and emits the a PNG file.
+
+    Options:
+      --help    Show this help message and exit
+  USAGE
+  exit 0
+end
+
+pngfile = ARGV[0]
+
+# if running inside the maccha sandbox, invoke the Web API
+if MACCHA_HOSTPORT
+  uri = URI("http://#{MACCHA_HOSTPORT}/safe-commands");
+  post = Net::HTTP::Post.new(uri)
+  post['content-type'] = 'application/json'
+  post.body = { exec: 'maccha-windowcapture', argv: ['--base64'], stdin: '' }.to_json
+  resp = Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(post) }
+  if resp.code != '200'
+    warn "maccha-windowcapture failed: #{resp.code}"
+    exit 1
+  end
+  # decode the base64-encoded PNG and save it to a file
+  File.open(pngfile, 'wb') do |f|
+    f.write(Base64.decode64(resp.body))
+  end
+  exit 0
+end
+
+# speical mode for when running outside the sandbox
+base64 = false
+if pngfile == '--base64'
+  # create a temporary file
+  pngfile = Tempfile.new(['maccha-windowcapture', '.tmp']).path
+  base64 = true
+end
+
+# call osascript to obtain the window coordinates of the active window
+ocascript = <<~SCRIPT
+tell application "System Events"
+  set frontProc to first process whose frontmost is true
+  set p to position of front window of frontProc
+  set s to size of front window of frontProc
+  return p & s
+end tell
+SCRIPT
+
+coords = `osascript -e '#{ocascript}'`.chomp.gsub(/,\s+/, ',')
+
+if !system('screencapture',  "-R#{coords}", pngfile)
+  warn "screencapture failed: #{$?.exitstatus}"
+  exit 1
+end
+
+if base64
+  puts Base64.encode64(File.read(pngfile))
+  File.unlink(pngfile)
+end
