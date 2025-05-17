@@ -26,14 +26,15 @@ Setup
 4. Open [http://127.0.0.1:11434](http://127.0.0.1:11434).
 5. Try asking things like "What time is it in Tokyo?", "ls -l".
 
-Useful Command(s)
+Useful Commands
 ---
 
-`bin/maccha-filter` is a filter program that applies AI to the input and emits the output.
+To faccilitate AI assitance over the local enviroment, following commands are provided. They can be either called via chat or directly in the console:
 
-As an example, you can obtain a summary of a file by runing `maccha-filter --model gpt-4.1 'give me the summary' < input-file > output-file`.
-
-You can ask via the chat to run `maccha-filter`; this is an easy way of orchestrating AIs to perform complex tasks!
+* `maccha-activate-app`: activates a macOS application and optionally simulates a keystroke
+* `maccha-filter`: an AI agent that processes data and returns the result (can be used to filter data)
+* `maccha-ocr`: an OCR program that converts images to text
+* `maccha-windowcapture`: captures the active window and saves it as an image
 
 Switching between the Models
 ---
