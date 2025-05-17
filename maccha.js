@@ -15,16 +15,6 @@ const HOME_DIRECTORY = require('os').homedir();
 const PORT = 11434;
 const MACCHA_ROOT = __dirname;
 
-// analyze command-line arguments, or bail out if they are invalid
-const argv = require('minimist')(process.argv.slice(2), {
-  boolean: ['keystroke'],
-  default: {keystroke: false },
-  unknown: function (arg) {
-    console.log(`Unknown argument: ${arg}`);
-    process.exit(1);
-  },
-});
-
 // add maccha/bin to PATH (if it is not already in PATH)
 const path_env = process.env.PATH.split(':');
 if (!path_env.includes(path.join(MACCHA_ROOT, 'bin'))) {
@@ -207,27 +197,6 @@ generate_mp3.llm = {
   }
 };
 
-async function keystroke(input) {
-  return runRawCommand({cmd: `osascript -e 'tell application id "${input.app}" to activate
-tell application "System Events"
-  delay 1
-  keystroke (ASCII character ${input.key - 0})
-end tell
-'`, stdin: ''})
-}
-
-keystroke.llm = {
-  description: "Simulates keystroke on the given application. Use this tool to interact with the application.",
-  parameters: {
-    type: "object",
-    properties: {
-      app: { type: "string", description: "name of the application"},
-      key: { type: "integer", description: "key code to press"},
-    },
-    required: ["app", "key"]
-  },
-};
-
 const functions = Object.fromEntries(
   [
     get_current_time,
@@ -236,7 +205,6 @@ const functions = Object.fromEntries(
     runCommand,
     generate_mp3,
     save_file,
-    ...(argv.keystroke ? [keystroke] : []),
   ].map(def => [def.name, def]));
 
 const app = express();
@@ -409,7 +377,8 @@ app.post('/safe-commands', (req, res) => {
   const { exec, argv, stdin } = req.body;
   if ((exec === 'maccha-ocr' && argv.length === 1) ||
       (exec === 'maccha-windowcapture' && argv.length === 1 && argv[0] === '--base64') ||
-      (exec === 'maccha-mp3' && argv.length === 1 && argv[0] === '--base64')) {
+      (exec === 'maccha-mp3' && argv.length === 1 && argv[0] === '--base64') ||
+      (exec === 'maccha-activate-app')) {
     const proc = spawn(exec, argv);
     let output = '';
     proc.stdout.on('data', chunk => { output += chunk.toString(); });
