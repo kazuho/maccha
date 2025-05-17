@@ -47,3 +47,6 @@ exec "osascript", "-e", <<~APPLESCRIPT
   end tell
   return result
 APPLESCRIPT
+
+warn "failed to spawn osascript:#{$?.exitstatus}"
+exit 1
