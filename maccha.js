@@ -163,25 +163,12 @@ save_file.llm = {
   }
 };
 
-generate_mp3.llm = {
-  description: "Generates a MP3 file given a SSML file.",
-  parameters: {
-    type: "object",
-    properties: {
-      ssml: { type: "string", description: "path to the SSML file"},
-      mp3: { type: "string", description: "path of the MP3 file to generate"}
-    },
-    required: ["ssml", "mp3"]
-  }
-};
-
 const functions = Object.fromEntries(
   [
     get_current_time,
     runPython3,
     fetchURL,
     runCommand,
-    generate_mp3,
     save_file,
   ].map(def => [def.name, def]));
 
