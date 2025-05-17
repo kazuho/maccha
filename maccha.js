@@ -57,7 +57,7 @@ get_current_time.llm = {
 async function runCommand(input) {
   return new Promise((resolve, reject) => {
     const proc = spawn('sandbox-exec',
-      ['-f', `${HOME_DIRECTORY}/.maccha.sandbox.pf`, 'env', `MACCHA_HOSTPORT=127.0.0.1:${PORT}`, 'sh', '-c', input.cmd]);
+      ['-f', `${HOME_DIRECTORY}/.maccha.sandbox.pf`, 'env', `MACCHA_HOSTPORT=127.0.0.1:${PORT}`, 'bash', '-c', input.cmd]);
     let output = '';
     proc.stdout.on('data', (chunk) => {
       output += chunk.toString();
@@ -77,7 +77,21 @@ async function runCommand(input) {
   });
 }
 runCommand.llm = {
-  description: 'Runs given shell command (e.g., ls, cat, curl). Outputs to stdout and stderr are returned.\nYou can write to the `./stash` directory; other directories are read-only.\nYou can use redirects, too. As an example, to write to stash/foo.txt, you can do `cat > stash/foo.txt` and supply the contents to stdin.',
+  description: `Provices access to bash shell on macOS that the user is using.
+
+You can:
+* Run arbitrary commands (e.g., ls, cat, curl); outputs to stdout and stderr are returned.
+* Use redirects and pipes.
+* Write to the current directory (i.e, ${path.join(HOME_DIRECTORY, 'maccha')}); other directories are read-only.
+
+Also, special commands are available:
+* \`maccha-activate-app\`: activates a macOS application and optionally simulates a keystroke
+* \`maccha-filter\`: an AI agent that processes data and returns the result (can be used to filter data)
+* \`maccha-ocr\`: an OCR program that converts images to text
+* \`maccha-windowcapture\`: captures the window and saves it as an image
+
+For details, consult \`--help\` of each command.
+`,
   parameters: {
     type: 'object',
     properties: {
