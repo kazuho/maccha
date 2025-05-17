@@ -15,14 +15,21 @@ const HOME_DIRECTORY = require('os').homedir();
 const PORT = 11434;
 const MACCHA_ROOT = __dirname;
 
-// コマンドラインオプションを解析
+// analyze command-line arguments, or bail out if they are invalid
 const argv = require('minimist')(process.argv.slice(2), {
-  boolean: ['windowcapture'],
-  default: { windowcapture: false },
-}, {
-  boolean: ['keystroke'],
-  default: { keystroke: false },
+  boolean: ['windowcapture', 'keystroke'],
+  default: { windowcapture: false, keystroke: false },
+  unknown: function (arg) {
+    console.log(`Unknown argument: ${arg}`);
+    process.exit(1);
+  },
 });
+
+// add maccha/bin to PATH (if it is not already in PATH)
+const path_env = process.env.PATH.split(':');
+if (!path_env.includes(path.join(MACCHA_ROOT, 'bin'))) {
+  process.env.PATH = `${path.join(MACCHA_ROOT, 'bin')}:${process.env.PATH}`;
+}
 
 // switch to the sandbox directory or ask the user to create it
 try {
@@ -81,7 +88,8 @@ async function runRawCommand(input) {
 
 async function runCommand(input) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('sandbox-exec', ['-f', `${HOME_DIRECTORY}/.maccha.sandbox.pf`, 'sh', '-c', input.cmd]);
+    const proc = spawn('sandbox-exec',
+      ['-f', `${HOME_DIRECTORY}/.maccha.sandbox.pf`, 'env', `MACCHA_HOSTPORT=127.0.0.1:${PORT}`, 'sh', '-c', input.cmd]);
     let output = '';
     proc.stdout.on('data', (chunk) => {
       output += chunk.toString();
@@ -416,6 +424,31 @@ data:${JSON.stringify({ error: err.toString() })}
     } else {
       res.status(500).json({ error: err.toString() });
     }
+  }
+});
+
+/* Some commands have to be executed out of the sandbox; they call this endpoint. */
+app.post('/safe-commands', (req, res) => {
+  if (process.env.MACCHA_HOSTPORT) {
+    throw new Error('safe commands cannot be run when MACCHA_HOSTPORT is set');
+  }
+  const { exec, argv, stdin } = req.body;
+  if (exec === 'maccha-ocr' && argv.length == 1) {
+    const proc = spawn(exec, argv);
+    let output = '';
+    proc.stdout.on('data', chunk => { output += chunk.toString(); });
+    proc.stderr.on('data', chunk => { output += chunk.toString(); });
+    proc.on('error', err => {
+      res.status(500).send(err.message);
+    });
+    proc.on('close', code => {
+      res.status(200).send(output);
+    });
+    if (stdin != null)
+      proc.stdin.write(stdin);
+    proc.stdin.end();
+  } else {
+    res.status(400).send("invalid command or arguments");
   }
 });
 

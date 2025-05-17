@@ -1,5 +1,10 @@
 #!/usr/bin/env ruby
 
+require 'net/http'
+require 'json'
+
+MACCHA_HOSTPORT = ENV.fetch('MACCHA_HOSTPORT', nil)
+
 # Show help if no arguments or --help is given
 if ARGV.empty? || ARGV[0] == '--help'
   puts <<~USAGE
@@ -16,6 +21,17 @@ if ARGV.empty? || ARGV[0] == '--help'
     You have to define the "ExtractText" handler in the Shortcuts app,
     see docs/shortcut-app-extracttext.png.
   USAGE
+  exit 0
+end
+
+# if running inside the maccha sandbox, invoke the Web API
+if MACCHA_HOSTPORT
+  uri = URI("http://#{MACCHA_HOSTPORT}/safe-commands");
+  post = Net::HTTP::Post.new(uri)
+  post['content-type'] = 'application/json'
+  post.body = { exec: 'maccha-ocr', argv: [ARGV[0]], stdin: '' }.to_json
+  resp = Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(post) }
+  puts resp.body
   exit 0
 end
 
