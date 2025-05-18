@@ -24,7 +24,7 @@ Setup
 2. To create the working directory for maccha, run `mkdir ~/maccha`.
 3. Run maccha.js, with OPENAI_APY_KEY set (e.g., `OPENAI_API_KEY=... node ~/projects/maccha/maccha.js`).
 4. Open [http://127.0.0.1:11434](http://127.0.0.1:11434).
-5. Try asking things like "What time is it in Tokyo?", "ls -l".
+5. Try asking things like "What time is it in Tokyo?", "take a screenshoot!"
 
 Useful Commands
 ---
@@ -35,6 +35,8 @@ To faccilitate AI assitance over the local enviroment, following commands are pr
 * `maccha-filter`: an AI agent that processes data and returns the result (can be used to filter data)
 * `maccha-ocr`: an OCR program that converts images to text
 * `maccha-windowcapture`: captures the active window and saves it as an image
+
+The chat agent understands that these commands are available.
 
 Switching between the Models
 ---
