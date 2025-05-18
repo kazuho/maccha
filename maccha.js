@@ -2,16 +2,21 @@
 // Express server wrapping llama.cpp server with OpenAI function-calling semantics
 // Logs client requests/responses and model requests/responses to console
 
-const express = require('express');
 const axios = require('axios');
 const bodyParser = require('body-parser');
-const { v4: uuidv4 } = require('uuid');
-const { spawn } = require('child_process');
-const TurndownService = require('turndown');
+const express = require('express');
+const forge = require('node-forge');
 const fs = require('fs');
+const http = require('http');
 const path = require('path');
+const { spawn } = require('child_process');
+const tls = require('tls');
+const TurndownService = require('turndown');
+const { v4: uuidv4 } = require('uuid');
 
 const HOME_DIRECTORY = require('os').homedir();
+const KEY_FILE = path.join(HOME_DIRECTORY, '.maccha.privatekey.pem');
+const CERTIFICATE_FILE = path.join(HOME_DIRECTORY, '.maccha.certificate.pem');
 const PORT = 11434;
 const MACCHA_ROOT = __dirname;
 
@@ -35,12 +40,34 @@ fs.writeFileSync(path.join(HOME_DIRECTORY, '.maccha.sandbox.pf'), `(version 1)
 (allow sysctl-read)
 (allow process-fork)
 (allow process-exec)
-(allow network*)
+(allow network* (remote ip "localhost:${PORT}"))
 (allow file-read*)
 (allow file-read-metadata)
 (allow file-write* (subpath "${HOME_DIRECTORY}/maccha"))
 (deny file-write*)
 `);
+
+// create private key and CA certificate for the proxy
+if (!fs.existsSync(KEY_FILE) || !fs.existsSync(CERTIFICATE_FILE)) {
+  /* generate private key */
+  const key = forge.pki.rsa.generateKeyPair(2048);
+  fs.writeFileSync(KEY_FILE, forge.pki.privateKeyToPem(key.privateKey));
+  /* generate a self-signed (i.e., root) certificate */
+  const cert = forge.pki.createCertificate();
+  cert.publicKey = key.publicKey;
+  cert.serialNumber = Date.now().toString();
+  cert.validity.notBefore = new Date();
+  cert.validity.notAfter = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+  cert.setSubject([{ name: 'commonName', value: 'localhost' }]);
+  cert.setIssuer(cert.subject.attributes);
+  cert.setExtensions([
+    {name: 'basicConstraints', cA: true, critical: true},
+    {name: 'keyUsage', keyCertSign: true, cRLSign: true, digitalSignature: true, critical: true},
+    {name: 'subjectKeyIdentifier'},
+  ]);
+  cert.sign(key.privateKey, forge.md.sha256.create());
+  fs.writeFileSync(CERTIFICATE_FILE, forge.pki.certificateToPem(cert));
+}
 
 // In-memory map to track original messages by id
 const messageStore = new Map();
@@ -57,7 +84,20 @@ get_current_time.llm = {
 async function runCommand(input) {
   return new Promise((resolve, reject) => {
     const proc = spawn('sandbox-exec',
-      ['-f', `${HOME_DIRECTORY}/.maccha.sandbox.pf`, 'env', `MACCHA_HOSTPORT=127.0.0.1:${PORT}`, 'bash', '-c', input.cmd]);
+      [
+        '-f',
+        `${HOME_DIRECTORY}/.maccha.sandbox.pf`,
+        'env',
+        `MACCHA_HOSTPORT=127.0.0.1:${PORT}`,
+        `http_proxy=127.0.0.1:${PORT}`,
+        `https_proxy=127.0.0.1:${PORT}`,
+        `SSL_CERT_FILE=${CERTIFICATE_FILE}`,
+        `REQUESTS_CA_BUNDLE=${CERTIFICATE_FILE}`,
+        `CURL_CA_BUNDLE=${CERTIFICATE_FILE}`,
+        'bash',
+        '-c',
+        input.cmd,
+      ]);
     let output = '';
     proc.stdout.on('data', (chunk) => {
       output += chunk.toString();
@@ -298,6 +338,36 @@ async function callLLMJson(body) {
   return [...prefixes, finalContent];
 }
 
+app.use((req, res, next) => {
+  if (req.headers.host != null && req.headers.host.match(/^127.0.0.1(?::|$)/)) {
+    next();
+    return;
+  }
+  const url = new URL(req.url, `${req.socket.encrypted ? 'https' : 'http'}://${req.headers.host}`);
+  console.log(`Proxy middleware request: ${req.method} ${url}`);
+  if (req.method !== 'GET') {
+    res.setHeader('Content-Type', 'text/plain');
+    res.status(405).send('Method Not Allowed');
+    return;
+  }
+
+  /* send the GET request and forward the response <--- HERE */
+  fetch(url, {
+    method: "GET",
+    headers: req.headers,
+  }).then(async (forwardResponse) => {
+    for (const [name, value] of Object.entries(req.headers)) {
+      res.setHeader(name, value);
+    }
+    res.status(forwardResponse.status);
+    const body = await forwardResponse.arrayBuffer();
+    res.send(Buffer.from(body));
+  }).catch((err) => {
+      console.error('Error forwarding request:', err);
+      res.status(503).send('Internal Server Error');
+    });
+  });
+
 app.post('/v1/chat/completions', async (req, res) => {
   try {
     // Expand IDs
@@ -379,5 +449,64 @@ app.post('/safe-commands', (req, res) => {
 // serve local files under htdocs
 app.use(express.static(`${MACCHA_ROOT}/htdocs`));
 
+const server = http.createServer(app);
+
+// MITM CONNECT requests, feeding the decrypted traffic into the HTTP processing
+server.on('connect', (() => {
+
+  const keyPem = fs.readFileSync(KEY_FILE);
+  const key = forge.pki.privateKeyFromPem(keyPem);
+  const caCertPem = fs.readFileSync(CERTIFICATE_FILE);
+  const caCert = forge.pki.certificateFromPem(caCertPem);
+  const certCache = new Map();
+
+  function getSecureContext(hostname) {
+    let certPem;
+    if (certCache.has(hostname)) {
+      certPem = certCache.get(hostname);
+    } else {
+      const cert = forge.pki.createCertificate();
+      cert.publicKey = caCert.publicKey;
+      cert.serialNumber = Date.now().toString();
+      cert.validity.notBefore = new Date();
+      cert.validity.notAfter = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+      cert.setSubject([{ name: 'commonName', value: hostname }]);
+      cert.setIssuer(caCert.subject.attributes);
+      cert.setExtensions([
+        {name: 'basicConstraints', cA: false},
+        {name: 'keyUsage', digitalSignature: true, keyEncipherment: true},
+        {name: 'extKeyUsage', serverAuth: true, clientAuth: true},
+        {name: 'subjectAltName', altNames: [{ type: 2, value: hostname }]},
+        {name: 'authorityKeyIdentifier', keyIdentifier: true},
+      ]);
+      cert.sign(key, forge.md.sha256.create());
+      certPem = forge.pki.certificateToPem(cert);
+      certCache.set(hostname, certPem);
+    }
+    // include CA certificate in the chain so clients see both leaf and root
+    return tls.createSecureContext({ key: keyPem, cert: certPem + caCertPem });
+  };
+
+  return (req, socket, head) => {
+    console.log(`CONNECT ${req.url}`);
+    /* process the request / response headers */
+    const [host, ] = req.url.split(':');
+    socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+    socket.unshift(head);
+
+    /* accept TLS and forward the decrypted traffic to the http context */
+    const tlsConn = new tls.TLSSocket(socket, {
+      isServer: true,
+      secureContext: getSecureContext(host),
+      SNICallback: (name, cb) => cb(null, getSecureContext(name)),
+    });
+    tlsConn.once('secure', () => {
+      tlsConn.pause();
+      server.emit('connection', tlsConn);
+      tlsConn.resume();
+    });
+  };
+})());
+
 // listen
-app.listen(PORT, () => console.log(`Proxy listening on ${PORT}`));
+server.listen(PORT, '127.0.0.1', () => console.log(`Proxy listening on ${PORT}`));
