@@ -34,7 +34,7 @@ try {
   process.exit(1);
 }
 
-// create sandbox file as ~/.maccha.sandbox.pf, overwriting if it exists (TODO use HTTP proxy and forbid network access)
+// create sandbox file as ~/.maccha.sandbox.pf, overwriting if it exists
 fs.writeFileSync(path.join(HOME_DIRECTORY, '.maccha.sandbox.pf'), `(version 1)
 (deny default)
 (allow sysctl-read)
