@@ -160,11 +160,11 @@ async function runPython3(input) {
   return runCommand({cmd: 'python3 /dev/stdin', stdin: input.script});
 }
 runPython3.llm = {
-  description: 'Runs given python3 script. Outputs to stdout and stderr are returned. This function is a wrapper of `runCommand`, and therefore shares the same access privledges.',
+  description: 'Runs given python3 script. Outputs to stdout and stderr are returned. This function is a wrapper of `runCommand`, and therefore shares the same access privileges.',
   parameters: {
     type: 'object',
     properties: {
-      script: { type: "string", desription: "python3 script"},
+      script: { type: "string", description: "python3 script"},
     },
     required: ["script"]
   }
