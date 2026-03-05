@@ -41,7 +41,7 @@ if MACCHA_HOSTPORT
   exit 0
 end
 
-# speical mode for when running outside the sandbox
+# special mode for when running outside the sandbox
 base64 = false
 if pngfile == '--base64'
   # create a temporary file

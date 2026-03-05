@@ -29,7 +29,7 @@ Setup
 Useful Commands
 ---
 
-To faccilitate AI assitance over the local enviroment, following commands are provided. They can be either called via chat or directly in the console:
+To faccilitate AI assistance over the local environment, following commands are provided. They can be either called via chat or directly in the console:
 
 * `maccha-activate-app`: activates a macOS application and optionally simulates a keystroke
 * `maccha-filter`: an AI agent that processes data and returns the result (can be used to filter data)
